@@ -1,0 +1,237 @@
+#!/bin/bash
+
+# 定义安装的PHP版本
+php5_ver=php-5.6.37
+php7_ver=php-7.0.27
+
+# 检测是否以root运行.
+check_root() 
+{
+  if [ ! $( id -u ) -eq 0 ]; then
+    echo "请使用root权限执行"
+    exit -1;
+  fi
+}
+# 检测是否以root运行
+check_root
+
+self_name=`basename $0`
+root_dir=$(cd "$(dirname "$0")"; pwd)
+
+# 帮助
+usage()
+{
+    printf "\n使用：\n"
+    printf "\t%-23s %s\n" "./$self_name <options>"
+    printf "\n选项：\n"
+    printf "\t%-23s %s\n" "-php5"            "安装php5"
+    printf "\t%-23s %s\n" "-php7"            "安装php7"
+    printf "\t%-23s %s\n" "-clean"           "清除安装包"
+    printf "\n例子：\n"
+    printf "\t%-23s %s\n" "./$self_name -php5"
+}
+# 检查入口参数
+if [ "$#" -ne 1 ]; then
+   usage;
+   exit 0;
+fi
+
+# 解压安装包
+pakg_name=
+pakg_dir=
+loose_package()
+{
+    if [ "$#" -ne 2 ]; then
+        printf "\n======== 解压参数为空 ========\n"
+        exit -1;
+    fi
+
+    pakg_name=$1
+    pakg_dir=$2
+    cd  $root_dir
+    if test -d $root_dir/$pakg_dir; then
+        printf "\n======== $pakg_name已经解压 ========\n"
+    elif test -f $root_dir/$pakg_name; then
+        printf "\n======== 解压缩$pakg_name ========\n"
+        tar zxf $root_dir/$pakg_name
+    else	
+        printf "\n======== 找不到$pakg_name ========\n"
+        exit -1;
+    fi
+    chmod 777 -R $root_dir/$pakg_dir
+    # 进入到解压后的文件夹
+    cd $root_dir/$pakg_dir 
+}
+
+# 删除包文件夹
+delete_package()
+{
+    if [ "$#" -ne 1 ]; then
+        printf "\n======== 目录名未指定 ========\n"
+        exit -1;
+    fi
+    dir_name=$1
+    if test -d $root_dir/$dir_name; then
+        rm -r $root_dir/$dir_name
+        printf "\n======== 删除'$dir_name'的文件夹完成 ========\n"
+    fi
+}
+
+# 安装依赖库
+install_depends()
+{
+    printf "\n======== 开始安装依赖库 ========\n"
+    apt-get update
+
+    # write params to stdin
+    # echo params | program
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get -y install  build-essential \
+                        automake \
+                        apache2 \
+                        apache2-dev \
+                        systemtap-sdt-dev \
+                        libgd2-xpm-dev \
+                        libdbi0-dev \
+                        libdbd-mysql \
+                        openssl \
+                        libsqlite3-dev \
+                        libbz2-dev \
+                        libdb-dev \
+                        libssl-dev \
+                        libart-2.0 \
+                        libpango1.0-dev \
+                        libxml2-dev \
+                        nmap \
+                        libmysqlclient-dev \
+                        curl \
+                        libcurl3 \
+                        libcurl4-openssl-dev \
+                        libmcrypt-dev
+    printf "\n======== 依赖库安装完成 ========\n"
+}
+
+# 安装php5
+install_php5()
+{
+    # 解压php5安装包
+    loose_package php5/${php5_ver}.tar.gz ${php5_ver}
+
+    # 拷贝apache2的php5模块配置
+    cp $root_dir/php5/php5.conf /etc/apache2/mods-available
+
+    # 创建php配置文件目录
+	mkdir -p /etc/php5/apache2/conf.d
+    cp $root_dir/php5/php5_config.nice ./
+
+	# 配置、编译与安装
+    ./php5_config.nice
+    make all 
+    make install 
+
+    #创建/usr/bin下的链接
+    ln -s /usr/local/bin/php /usr/bin/php
+    ln -s /usr/local/bin/phpize /usr/bin/phpize
+    ln -s /usr/local/bin/php-config /usr/bin/php-config
+    ln -s /usr/local/bin/php-cgi /usr/bin/php-cgi
+
+	# 拷贝配置文件
+    cp php.ini-production /etc/php5/apache2/php.ini
+	
+	# 关闭apache2和php导出信息
+	sed -i 's/expose_php = On/expose_php = Off/g' /etc/php5/apache2/php.ini
+    sudo sed -i "s/\;date.timezone = /date.timezone = UTC/g" /etc/php5/apache2/php.ini
+	if test -d /etc/apache2/conf-available; then
+		sed -i 's/ServerTokens OS/ServerTokens Prod/g' /etc/apache2/conf-available/security.conf
+		sed -i 's/ServerSignature On/ServerSignature Off/g' /etc/apache2/conf-available/security.conf
+	elif test -d /etc/apache2/conf.d; then
+		sed -i 's/ServerTokens OS/ServerTokens Prod/g' /etc/apache2/conf.d/security
+		sed -i 's/ServerSignature On/ServerSignature Off/g' /etc/apache2/conf.d/security
+	fi
+
+    # 启动apache2 mpm_prefork模式
+	a2dismod mpm_worker
+	a2dismod mpm_event
+	a2enmod mpm_prefork
+	service apache2 restart
+
+	# 切换到脚本根目录
+	cd $root_dir
+    printf "\n======== 安装php5完成 ========\n"
+}
+
+# 安装php7
+install_php7()
+{
+    # 解压php7安装包
+    loose_package php/${php7_ver}.tar.gz ${php7_ver}
+
+    # 拷贝apache2的php5模块配置
+    cp $root_dir/php/php7.conf /etc/apache2/mods-available
+
+    # 创建php配置文件目录
+	mkdir -p /etc/php7/apache2/conf.d
+    cp $root_dir/php7/php7_config.nice ./
+
+	# 配置、编译与安装
+    ./php7_config.nice
+    make all 
+    make install 
+    
+    #创建/usr/bin下的链接
+    ln -s /usr/local/bin/php /usr/bin/php
+    ln -s /usr/local/bin/phpize /usr/bin/phpize
+    ln -s /usr/local/bin/php-config /usr/bin/php-config
+    ln -s /usr/local/bin/php-cgi /usr/bin/php-cgi
+
+	# 拷贝配置文件
+    cp php.ini-production /etc/php7/apache2/php.ini
+	
+	# 关闭apache2和php导出信息
+	sed -i 's/expose_php = On/expose_php = Off/g' /etc/php7/apache2/php.ini
+    sudo sed -i "s/\;date.timezone = /date.timezone = UTC/g" /etc/php7/apache2/php.ini
+	if test -d /etc/apache2/conf-available; then
+		sed -i 's/ServerTokens OS/ServerTokens Prod/g' /etc/apache2/conf-available/security.conf
+		sed -i 's/ServerSignature On/ServerSignature Off/g' /etc/apache2/conf-available/security.conf
+	elif test -d /etc/apache2/conf.d; then
+		sed -i 's/ServerTokens OS/ServerTokens Prod/g' /etc/apache2/conf.d/security
+		sed -i 's/ServerSignature On/ServerSignature Off/g' /etc/apache2/conf.d/security
+	fi
+
+    # 启动apache2 mpm_prefork模式
+	a2dismod mpm_worker
+	a2dismod mpm_event
+	a2enmod mpm_prefork
+	service apache2 restart
+
+	# 切换到脚本根目录
+	cd $root_dir
+    printf "\n======== 安装php7完成 ========\n"
+}
+
+
+while [ ! -z "$1" ]; do 
+    case $1 in
+	    -php5)
+                # 安装依赖库
+                install_depends
+                # 安装php5
+                install_php5
+            ;;
+            -php7)
+                # 安装依赖库
+                install_depends
+                # 安装php7
+                install_php7
+            ;;
+            -clean)
+                # 删除编译过程中解压的文件夹
+                delete_package $php5_ver
+                delete_package $php7_ver
+            ;;
+            *) usage; exit 0 ;;
+    esac
+    shift
+done
+
+exit 0

@@ -1,0 +1,33 @@
+#! /bin/sh
+#
+# Created by configure
+
+'./configure' \
+'--with-bz2' \
+'--with-curl' \
+'--with-jpeg-dir' \
+'--with-gd' \
+'--enable-pcntl' \
+'--enable-shared' \
+'--enable-mbstring' \
+'--with-mcrypt' \
+'--with-mysql=mysqlnd' \
+'--with-pdo-mysql=mysqlnd' \
+'--with-mysqli=mysqlnd' \
+'--enable-fpm' \
+'--enable-phar' \
+'--enable-bcmath' \
+'--with-zlib' \
+'--enable-zip' \
+'--enable-ftp' \
+'--with-gettext' \
+'--enable-sockets' \
+'--with-freetype-dir' \
+'--with-fpm-user=www-data' \
+'--with-fpm-group=www-data' \
+'--sysconfdir=/etc' \
+'--with-config-file-path=/etc/php5/apache2' \
+'--with-config-file-scan-dir=/etc/php5/apache2/conf.d' \
+'--with-mysqli=/usr/bin/mysql_config' \
+'--with-apxs2=/usr/bin/apxs2' \
+"$@"
